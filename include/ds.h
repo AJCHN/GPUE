@@ -2,16 +2,16 @@
 //##############################################################################
 /**
  *  @file    ds.h
- *  @author  Lee J. O'Riordan (mlxd)
+ *  @author  James R. Schloss (leios) and Lee J. O'Riordan (mlxd)
  *  @date    12/11/2015
  *  @version 0.1
  *
  *  @brief Dastructure for simulation runtime parameters
  *
  *  @section DESCRIPTION
- *  This file keeps track of and generates a parameter file (INI format) of the
- *	simulation parameters used. The resulting file is read in by the Python
- *	post-proc/analysis functions.
+ *      This file holds necessary classes and structs for all GPUE simulations.
+ *      EqnNode and EqnNode_gpu are for dynamic parsing and Grid is for 
+ *      general use.
  */
  //#############################################################################
 
@@ -32,66 +32,27 @@
 #include <iostream>
 
 /*----------------------------------------------------------------------------//
-* GPU STACK
-* Note: It is clear that a stack implementation on GPU's for tree traversal is
-*       not a universally good idea; however, there is an array of these trees,
-*       so there is still a need for parallelization. I feel a massively
-*       parallel CPU system would be a bit better for this purpose, but we
-*       cannot afford the transfer time every timestep.
-*-----------------------------------------------------------------------------*/
-/*
-
-struct stack {
-    void **data;
-    size_t top, capacity, size;
-};
-
-stack get_stack(size_t size) {
-    stack stk;
-
-    stk.data = malloc(4 * size);
-    stk.capacity = 4;
-    stk.top = 0;
-
-    return stk;
-}
-
-bool stack_empty(stack *stk){
-    return (stk->top == 0);
-}
-
-void stack_push(stack *stk, void *element) {
-    if (stk->top == stk->capacity) {
-        stk->capacity *= 2;
-        stk->data = realloc(stk->data, stk->capacity * sizeof(stk->data[0]));
-    }
-
-    stk->data[stk->top++] = element;
-}
-
-void *stack_pop(struct stack *stk) {
-    if (stack_empty(stk)) {
-        return NULL;
-    }
-
-    return stk->data[--stk->top];
-}
-
-void free_stack(struct stack stk) {
-    free(stk.data);
-}
-*/
-
-/*----------------------------------------------------------------------------//
 * CLASSES
 *-----------------------------------------------------------------------------*/
 
+/**
+ * @brief       Struct for an x, y, z position
+ * @ingroup     data
+ */
 struct pos{
     double x, y, z;
 };
 
+/**
+ * @brief       function pointer type
+ * @ingroup     data
+ */
 typedef double (*fnPtr) (double, double);
 
+/**
+ * @brief       Struct to hold the node information for the AST on the CPU
+ * @ingroup     data
+ */
 struct EqnNode{
     double val = 0;
     bool is_dynamic = false;
@@ -103,8 +64,10 @@ struct EqnNode{
     bool has_op = false;
 };
 
-// For ease of allocating, we will store the entire GPU tree into an array that
-// simply connects elements inside
+/**
+ * @brief       Struct to hold the node information for the AST on the GPU
+ * @ingroup     data
+ */
 struct EqnNode_gpu{
     double val = 0;
     bool is_dynamic = false;
@@ -120,10 +83,6 @@ struct EqnNode_gpu{
  * @brief       Class to hold the variable map and grid information
  * @ingroup     data
  */
-// NOTE: This is necessary if we ever want to do dynamic grid manipulation.
-// NOTE: I do not like this integer double split for retrieval. Find solution.
-// NOTE: Consider changing unordered maps to switches for performance
-// NOTE: Add FileIO to public functions
 class Grid{
     // Here we keep our variable map (unordered for performance)
     // and also grid information. Note that dx dy, and dz are in param_double
@@ -237,8 +196,22 @@ class Grid{
 };
 typedef class Grid Grid;
 
+/**
+* @brief        Generates CUFFT plan for 2D simulations
+* @ingroup      gpu
+*/
 void generate_plan_other2d(cufftHandle *plan_fft1d, Grid &par);
+
+/**
+* @brief        Generates CUFFT plan for 3D simulations
+* @ingroup      gpu
+*/
 void generate_plan_other3d(cufftHandle *plan_fft1d, Grid &par, int axis);
+
+/**
+* @brief        Sets default functions for all fields (A, K, V)
+* @ingroup      data
+*/
 void set_fns(Grid &par);
 
 #endif

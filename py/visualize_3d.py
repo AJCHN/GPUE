@@ -22,7 +22,8 @@ import bpy
 import numpy as np
 
 # files for visualization
-voxelfile = "edges_linpol.bvox"
+voxelfile = "test_Edges.bvox"
+outfile = "image.png"
 infile = open(voxelfile, "r")
 
 #------------------------------------------------------------------------------#
@@ -35,12 +36,29 @@ def remove_obj(scene):
         if ob.name != "Camera":
             scene.objects.unlink(ob)
 
+# Creates sphere material
+def create_new_material (passedName,passedcolor):
+    tempMat = bpy.data.materials.new(passedName)
+    if tempMat != None:
+        tempMat.diffuse_color = passedcolor
+        tempMat.diffuse_shader = 'LAMBERT'
+        tempMat.diffuse_intensity = 1.0
+        tempMat.specular_color = (0.9,0.9,0.9)
+        tempMat.specular_shader = 'COOKTORR'
+        tempMat.specular_intensity = 0.5
+        tempMat.use_transparency=False
+        tempMat.alpha = 0.01
+        tempMat.ambient = 0.2
+        tempMat.emit = 0.9
+        tempMat.keyframe_insert(data_path="diffuse_color", frame=1, index=-1)
+    return tempMat
+
 # Function to define the scene
 def def_scene(box_length, res_stand, xres, yres, zres):
     # first, we need to relocate the camera
-    x_cam = 1.0
+    x_cam = 0.0
     y_cam = 1.2
-    z_cam = 0.0
+    z_cam = 0.8
 
     scene = bpy.context.scene
 
@@ -117,7 +135,7 @@ def create_volume(passedName, xres, yres, zres, step_size, dens_scale,
     voxTex.color_ramp.color_mode = "RGB"
     ramp = voxTex.color_ramp
 
-    values = [(0.0,(0,0,0,0)), (0.5,(0,1,0,0.3)), (0.75,(0,0,1,0.5)), (1.0, (1,1,1,1))]
+    values = [(0.0,(0,0,1,0)), (0.5,(0,0,1,0.3)), (0.75,(1,0,1,0.5)), (1.0, (1,0,0,1))]
 
     for n,value in enumerate(values):
         #ramp.elements.new((n+1)*0.2)
@@ -149,7 +167,20 @@ def render_img(filename):
     bpy.data.scenes['Scene'].render.filepath = filename
     bpy.ops.render.render( write_still=True )
 
-# Function to print colorbar on image
+# Function to add fiber
+def add_fiber():
+    temp_fiber = bpy.ops.mesh.primitive_cylinder_add(radius = 0.1,
+                     rotation=(0, 0, 0))
+
+    ob = bpy.context.active_object
+    ob.scale[2] = 5
+    ob.name = "fiber"
+    me = ob.data
+    color = (0.7, 0.7, 0.7)
+    mat = create_new_material(ob.name, color)
+    me.materials.append(mat)
+
+
 
 
 #------------------------------------------------------------------------------#
@@ -159,5 +190,5 @@ def render_img(filename):
 xDim = yDim = zDim = 256
 scene = def_scene(5, xDim, xDim, yDim, zDim)
 create_cube(5, xDim, xDim, yDim, zDim, 0.01, 15, voxelfile)
-filename = "image.png"
-render_img(filename)
+add_fiber()
+render_img(outfile)

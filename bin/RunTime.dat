@@ -14,9 +14,9 @@
          ╚═════╝ ╚═╝      ╚═════╝ ╚══════╝
 
    GPUE - GPU Gross-Pitaevskii Equation solver
-            Version 0.abs(exp(i*pi))
+            Version abs(exp(i*pi))
 
-       http:://bitbucket.org/loriordan/gpue
+       http:://github.com/gpue-group/gpue
 
 #################################################
 #################################################

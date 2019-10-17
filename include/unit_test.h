@@ -1,7 +1,7 @@
 ///@endcond
 //##############################################################################
 /**
- *  @file    evolution.h
+ *  @file    unit_test.h
  *  @author  James Ryan Schloss (leios)
  *  @date    5/31/2016
  *  @version 0.1
@@ -19,26 +19,10 @@
 #define UNIT_H
 
 #include "ds.h"
-/* Function declarations */
-/*
- * arg1 = Function result code from CUDA CUFFT calls.
- * arg2 = String data for name of function called. Prints value to stdout.
- */
-
-// UPDATE LIST LATER
  /**
  * @brief	performs all necessary unit tests to ensure proper function
  * @ingroup	data
  */
 void test_all();
-
- /**
- * @brief        Performs a simple integral with trapezoidal sum
- * @ingroup      data
- * @param        array to be integrated
- * @param        dimension of the array to be integrated
- * @param        dx of the array (assuming we are integrating along x)
- */
-double trapz(double *array, int dimension, double dx);
 
 #endif

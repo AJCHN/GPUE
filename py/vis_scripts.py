@@ -141,6 +141,66 @@ to_vtk(item, xDim, yDim, zDim, 1, "test_Bphi.vtk")
 #print(comy)
 '''
 
-item = var(xDim, yDim, zDim,"data_lin","Edges_0")
-to_vtk(item, xDim, yDim, zDim, 1, "Edges.vtk")
-#proj_var1d(xDim, yDim, zDim, "data", "Az_0", "Az_1d.dat")
+'''
+for i in range(0,3):
+    if (i == 2):
+        data_dir = "data_HE21lin2_w50"
+    if (i == 1):
+        data_dir = "data_lin2_w50_real_time"
+    if (i == 0):
+        data_dir = "data_broad2_w50_realtime1"
+
+    item = proj_var2d(xDim, yDim, zDim, data_dir, "Bx_0", "BX2D.dat")
+    item = proj_var2d(xDim, yDim, zDim, data_dir, "By_0", "BY2D.dat")
+    item = proj_var2d(xDim, yDim, zDim, data_dir, "Bz_0", "BZ2D.dat")
+    item = proj_var2d(xDim, yDim, zDim, data_dir, "Br_0", "BR2D.dat")
+    item = proj_var2d(xDim, yDim, zDim, data_dir, "Bphi_0", "BPHI2D.dat")
+    print(data_dir + " is done")
+'''
+#item = proj_var1d(xDim, yDim, zDim, "data_check", "Br_0", "BR1D.dat")
+#item = proj_2d(xDim, yDim, zDim, "data_check", "wfc", 0)
+#item = var(xDim, yDim, zDim,"data_broad2_w50_realtime1","Edges_0")
+'''
+for i in range(0,10):
+    print(i)
+    item = proj_var2d(xDim, yDim, zDim,"data_check","Edges_%s"%(i*100), "Edges_%s.dat"%(i*100))
+    #to_vtk(item, xDim, yDim, zDim, 1, "test_Edges%s.vtk"%(i*100))
+'''
+
+'''
+xDim = 128
+yDim = 128
+zDim = 128
+
+item = var(xDim, yDim, zDim,"data_lin","Az_0")
+to_vtk(item, xDim, yDim, zDim, 1, "test_Az.vtk")
+
+item = var(xDim, yDim, zDim,"data_lin","Ax_0")
+to_vtk(item, xDim, yDim, zDim, 1, "test_Ax.vtk")
+
+item = var(xDim, yDim, zDim,"data_lin","Ay_0")
+to_vtk(item, xDim, yDim, zDim, 1, "test_Ay.vtk")
+'''
+
+#item = var_r2(xDim, yDim, zDim,"/media/james/ExtraDrive1/GPUE/data_lin")
+#to_vtk(item, xDim, yDim, zDim, 1, "test_Ar.vtk")
+
+#item = var(xDim, yDim, zDim,"/media/james/ExtraDrive1/GPUE/data_elong_w0.5n",
+#           "Edges_0")
+#to_vtk(item, xDim, yDim, zDim, 1, "test_Edges.vtk")
+#item = var(xDim, yDim, zDim,"/media/james/ExtraDrive1/GPUE/data_lin","Edges_0")
+
+item = var(xDim, yDim, zDim,"/media/james/ExtraDrive1/GPUE/data_elong_w0.5n","Edges_0")
+to_vtk(item, xDim, yDim, zDim, 1, "test_Edges.vtk")
+item = var(xDim, yDim, zDim,"/media/james/ExtraDrive1/GPUE/data_elong_w0.5n","V_0")
+to_vtk(item, xDim, yDim, zDim, 1, "test_V.vtk")
+item = var(xDim, yDim, zDim,"/media/james/ExtraDrive1/GPUE/data_elong_w0.5n","Az_0")
+to_vtk(item, xDim, yDim, zDim, 1, "test_Az.vtk")
+#to_bvox(item, xDim, yDim, zDim, 1, "test_Edges.bvox")
+
+#thresh = find_thresh(xDim, yDim, "/media/james/ExtraDrive1/GPUE/data_elong",
+#                     "Pwfc_", 0, 0.5)
+#print(thresh)
+#angle = find_angle(xDim, yDim, "/media/james/ExtraDrive1/GPUE/data_elong",
+#                   "Pwfc_", 0, thresh)
+#print(angle)

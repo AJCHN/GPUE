@@ -38,33 +38,42 @@
 	//printf("OpenMP support disabled due to Clang/LLVM being behind the trend.",);
 #endif
 
-/* Function declarations */
-/*
- * arg1 = Function result code from CUDA CUFFT calls.
- * arg2 = String data for name of function called. Prints value to stdout.
- */
-
- /**
- * @brief	Checks if CUDA operation has succeeded. Prints to stdout.
+/**
+ * @brief	Checks if a CUDA operation has succeeded. Prints to stdout.
  * @ingroup	data
- * @param	result Function result code of CUDA operation
- * @param	c Descriptor of CUDA operation
- * @return	0 for success. See CUDA failure codes in cuda.h for other values.
+ * @param	result Result code of CUDA operation
  */
-int isError(int result, char* c); //Checks to see if an error has occurred.
+void cudaHandleError(cudaError_t result);
+
+/**
+ * @brief Checks if the last CUDA operation has succeeded. Prints to stdout.
+ * @ingroup data
+ */
+void cudaCheckError();
+
+/**
+ * @brief Checks if a cuFFT operation has succeeded. Prints to stdout.
+ * @ingroup data
+ * @param result Result code of cuFFT operation
+ */
+void cufftHandleError(cufftResult result);
+
+/**
+ * @brief Performs parallel summation on a flat array of data
+ * @ingroup gpu
+ * @param data Gpu-allocated array to reduce
+ * @param length Length of data
+ * @param threadCount number of threads to use
+ */
+void gpuReduce(double* data, int length, int threadCount);
 
 /**
 * @brief	Performs parallel summation and renormalises the wavefunction
 * @ingroup	data
 * @param	gpuWfc GPU memory location for wavefunction
-* @param	gpuParSum GPU memory location for parallel summation memory space
-* @param	xDim Length of X dimension
-* @param	yDim Length of Y dimension
-* @param	threads Number of CUDA threads for operation
-* @return	0 for success. See CUDA failure codes in cuda.h for other values.
+* @param	par Parameter class
 */
 void parSum(double2* gpuWfc, Grid &par);
-void parSum(double* gpuWfc, double *gpuParSum, Grid &par);
 
 /**
 * @brief	Creates the optical lattice to match the vortex lattice constant
@@ -77,6 +86,7 @@ void parSum(double* gpuWfc, double *gpuParSum, Grid &par);
 * @param	v_opt Optical lattice memory address location
 * @param	x X grid array
 * @param	y Y grid array
+* @param	Parameter class
 */
 void optLatSetup(const std::shared_ptr<Vtx::Vortex> centre, const double* V,
                  std::vector<std::shared_ptr<Vtx::Vortex>> &vArray, double theta_opt,
@@ -84,19 +94,12 @@ void optLatSetup(const std::shared_ptr<Vtx::Vortex> centre, const double* V,
                  Grid &par);
 
 /**
-* @brief	Calculates the energy of the condensate. Not implemented.
+* @brief	Calculates the energy of the condensate.
 * @ingroup	data
-* @param	Energy Host array of energy calculated values
-* @param	Energy_gpu Device array of energy calculated values
-* @param	V_op Potential (position space) operator
-* @param	K_op Kinetic (momentum space) operator
-* @param	dx Increment along x
-* @param	dy Increment along y
 * @param	gpuWfc Device wavefunction array
-* @param	gState Indicate if imaginary or real time evolution
+* @param	Parameter class
 * @return	$\langle \Psi | H | \Psi \rangle$
 */
-double energy_angmom(double2 *gpuWfc, int gState, Grid &par);
 double energy_calc(Grid &par, double2* wfc);
 
 #endif

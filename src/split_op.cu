@@ -1,4 +1,3 @@
-
 #include "../include/split_op.h"
 #include "../include/kernels.h"
 #include "../include/constants.h"
@@ -12,6 +11,7 @@
 #include "../include/edge.h"
 #include "../include/manip.h"
 #include "../include/vort.h"
+#include "../include/evolution.h"
 #include <string>
 #include <iostream>
 
@@ -35,64 +35,46 @@ double x0_shift, y0_shift; //Optical lattice shift parameters.
 double Rxy; //Condensate scaling factor.
 double a0x, a0y; //Harmonic oscillator length in x and y directions
 double sepMinEpsilon=0.0; //Minimum separation for epsilon.
-int kill_idx = -1;;
-/*
- * Checks CUDA routines have exitted correctly.
- */
-int isError(int result, char* c){
-    if(result!=0){
-        printf("Error has occurred for method %s with return type %d\n",
-               c,result);
-        exit(result);
+int kill_idx = -1;
+
+void cudaHandleError(cudaError_t result) {
+    if (result != cudaSuccess) {
+        std::cout << "Cuda operation failed!\n Error code: " << result << '\n';
+        exit(1);
     }
-    return result;
 }
+
+void cudaCheckError() {
+    cudaError_t result = cudaGetLastError();
+    if (result != cudaSuccess) {
+        std::cout << "Cuda kernel failed!\n Error code: " << result << '\n';
+        exit(1);
+    }
+}
+
+void cufftHandleError(cufftResult result) {
+    if (result != CUFFT_SUCCESS) {
+        std::cout << "cufft operation failed!\n Error code: " << result << '\n';
+    }
+}
+
 /*
- * Used to perform parallel summation on WFC for normalisation.
- */
-void parSum(double* gpuWfc, double* gpuParSum, Grid &par){
-    // May need to add double l
-    int dimnum = par.ival("dimnum");
-    double dx = par.dval("dx");
-    double dy = par.dval("dy");
-    double dz = par.dval("dz");
-    dim3 threads = par.threads;
-    int xDim = par.ival("xDim");
-    int yDim = par.ival("yDim");
-    int zDim = par.ival("zDim");
-    dim3 grid_tmp(xDim, 1, 1);
-    int gsize = xDim;
-    double dg = dx;
+ * General-purpose summation of an array on the gpu, storing the result in the first element
+*/
+void gpuReduce(double* data, int length, int threadCount) {
+    dim3 block(length / threadCount, 1, 1);
+    dim3 threads(threadCount, 1, 1);
 
-    // Setting option for 3d
-    if (dimnum > 1){
-        grid_tmp.x *= yDim;
-        gsize *= yDim;
-        dg *= dy;
+    while((double)length/threadCount > 1.0){
+        multipass<<<block,threads,threadCount*sizeof(double)>>>(&data[0],
+                                                                &data[0]);
+        cudaCheckError();
+        length /= threadCount;
+        block = (int) ceil((double)length/threadCount);
     }
-    if (dimnum > 2){
-        grid_tmp.x *= zDim;
-        gsize *= zDim;
-        dg *= dz;
-    }
-    dim3 block(grid_tmp.x/threads.x, 1, 1);
-    dim3 thread_tmp = threads;
-    int pass = 0;
-
-    set_eq<<<par.grid, par.threads>>>(gpuWfc, gpuParSum);
-
-    dim3 grid = par.grid;
-    while((double)grid_tmp.x/threads.x > 1.0){
-        multipass<<<block,thread_tmp,thread_tmp.x*sizeof(double)>>>(
-            &gpuParSum[0],&gpuParSum[0]);
-        grid_tmp.x /= threads.x;
-        block = (int) ceil((double)grid_tmp.x/threads.x);
-        pass++;
-        //std::cout << grid_tmp.x << '\n';
-    }
-    thread_tmp = grid_tmp.x;
-    multipass<<<1,thread_tmp,thread_tmp.x*sizeof(double2)>>>(&gpuParSum[0],
-                                                           &gpuParSum[0]);
+    multipass<<<1,length,threadCount*sizeof(double)>>>(&data[0],
+                                                       &data[0]);
+    cudaCheckError();
 }
 
 /*
@@ -124,33 +106,14 @@ void parSum(double2* gpuWfc, Grid &par){
         dg *= dz;
     }
     dim3 block(grid_tmp.x/threads.x, 1, 1);
-    dim3 thread_tmp = threads;
-    int pass = 0;
 
     double *density;
-    cudaMalloc((void**) &density, sizeof(double)*gsize);
+    cudaHandleError( cudaMalloc((void**) &density, sizeof(double)*gsize) );
 
     complexMagnitudeSquared<<<par.grid, par.threads>>>(gpuWfc, density);
+    cudaCheckError();
 
-/*
-    std::cout << "grid / threads = " << '\t'
-              << (double)grid_tmp.x/threads.x << '\n'
-              << "grid.x is: " << grid_tmp.x << '\t'
-              << "threads.x are: " << threads.x << '\n';
-*/
-    dim3 grid = par.grid;
-    while((double)grid_tmp.x/threads.x > 1.0){
-        multipass<<<block,threads,threads.x*sizeof(double)>>>(&density[0],
-                                                              &density[0]);
-        grid_tmp.x /= threads.x;
-        block = (int) ceil((double)grid_tmp.x/threads.x);
-        pass++;
-        //std::cout << pass << '\t' << grid_tmp.x << '\n';
-    }
-    thread_tmp = grid_tmp.x;
-    multipass<<<1,thread_tmp,thread_tmp.x*sizeof(double)>>>(&density[0],
-                                                            &density[0]);
-
+    gpuReduce(density, grid_tmp.x, threads.x);
 /*
     // Writing out in the parSum Function (not recommended, for debugging)
     double *sum;
@@ -160,8 +123,9 @@ void parSum(double2* gpuWfc, Grid &par){
     std::cout << (sum[0]) << '\n';
 */
     scalarDiv_wfcNorm<<<par.grid,par.threads>>>(gpuWfc, dg, density, gpuWfc);
+    cudaCheckError();
 
-    cudaFree(density);
+    cudaHandleError( cudaFree(density) );
 }
 
 /**
@@ -253,20 +217,25 @@ double energy_calc(Grid &par, double2* wfc){
     int zDim = par.ival("zDim");
     int gsize = xDim*yDim*zDim;
 
+    int dimnum = par.ival("dimnum");
+
     double dx = par.dval("dx");
     double dy = par.dval("dy");
     double dz = par.dval("dz");
     double dg = dx*dy*dz;
 
+    bool corotating = par.bval("corotating");
+    bool gpe = par.bval("gpe");
+
     cufftHandle plan;
 
-    if (par.ival("dimnum") == 1){
+    if (dimnum == 1){
         plan = par.ival("plan_1d");
     }
-    if (par.ival("dimnum") == 2){
+    if (dimnum == 2){
         plan = par.ival("plan_2d");
     }
-    if (par.ival("dimnum") == 3){
+    if (dimnum == 3){
         plan = par.ival("plan_3d");
     }
 
@@ -276,185 +245,131 @@ double energy_calc(Grid &par, double2* wfc){
     double2 *energy_r, *energy_k;
     double *energy;
 
-    cudaMalloc((void **) &wfc_c, sizeof(double2)*gsize);
-    cudaMalloc((void **) &wfc_k, sizeof(double2)*gsize);
-    cudaMalloc((void **) &energy_r, sizeof(double2)*gsize);
-    cudaMalloc((void **) &energy_k, sizeof(double2)*gsize);
+    cudaHandleError( cudaMalloc((void **) &wfc_c, sizeof(double2)*gsize) );
+    cudaHandleError( cudaMalloc((void **) &wfc_k, sizeof(double2)*gsize) );
+    cudaHandleError( cudaMalloc((void **) &energy_r, sizeof(double2)*gsize) );
+    cudaHandleError( cudaMalloc((void **) &energy_k, sizeof(double2)*gsize) );
 
-    cudaMalloc((void **) &energy, sizeof(double)*gsize);
+    cudaHandleError( cudaMalloc((void **) &energy, sizeof(double)*gsize)  );
 
     // Finding conjugate
     vecConjugate<<<grid, threads>>>(wfc, wfc_c);
+    cudaCheckError();
 
     // Momentum-space energy
-    cufftExecZ2Z(plan, wfc, wfc_k, CUFFT_FORWARD);
+    cufftHandleError( cufftExecZ2Z(plan, wfc, wfc_k, CUFFT_FORWARD) );
     scalarMult<<<grid, threads>>>(wfc_k, renorm_factor, wfc_k);
+    cudaCheckError();
 
     vecMult<<<grid, threads>>>(wfc_k, K, energy_k);
+    cudaCheckError();
+    cudaHandleError( cudaFree(wfc_k) );
 
-    cufftExecZ2Z(plan, energy_k, energy_k, CUFFT_INVERSE);
+    cufftHandleError( cufftExecZ2Z(plan, energy_k, energy_k, CUFFT_INVERSE) );
     scalarMult<<<grid, threads>>>(energy_k, renorm_factor, energy_k);
+    cudaCheckError();
 
     cMult<<<grid, threads>>>(wfc_c, energy_k, energy_k);
+    cudaCheckError();
 
     // Position-space energy
-    vecMult<<<grid, threads>>>(wfc, V, energy_r);
-    cMult<<<grid, threads>>>(wfc_c, energy_r, energy_r);
+    // Adding in the nonlinear step for GPE (related to cMultDensity)
+    if (gpe){
+        double interaction = par.dval("interaction");
+        double gDenConst  = par.dval("gDenConst");
 
-    complexAbsSum<<<grid, threads>>>(energy_r, energy_k, energy);
+        double *real_comp;
+        cudaHandleError( cudaMalloc((void**) &real_comp, sizeof(double)*gsize) );
+        complexMagnitudeSquared<<<grid, threads>>>(wfc, real_comp);
+        cudaCheckError();
+        scalarMult<<<grid, threads>>>(real_comp,
+                                      0.5*gDenConst*interaction,
+                                      real_comp);
+        cudaCheckError();
+        vecSum<<<grid, threads>>>(real_comp, V, real_comp);
+        cudaCheckError();
+        vecMult<<<grid, threads>>>(wfc, real_comp, energy_r);
+        cudaCheckError();
 
-    double *energy_cpu;
-    energy_cpu = (double *)malloc(sizeof(double)*gsize);
-
-    cudaMemcpy(energy_cpu, energy, sizeof(double)*gsize,
-               cudaMemcpyDeviceToHost);
-
-    double sum = 0;
-    for (int i = 0; i < gsize; ++i){
-        sum += energy_cpu[i]*dg;
+        cudaHandleError( cudaFree(real_comp) );
+    }
+    else{
+        vecMult<<<grid, threads>>>(wfc, V, energy_r);
+        cudaCheckError();
     }
 
-    free(energy_cpu);
-    cudaFree(energy_r);
-    cudaFree(energy_k);
-    cudaFree(energy);
-    cudaFree(wfc_c);
-    cudaFree(wfc_k);
+    cMult<<<grid, threads>>>(wfc_c, energy_r, energy_r);
+    cudaCheckError();
+
+    energy_sum<<<grid, threads>>>(energy_r, energy_k, energy);
+    cudaCheckError();
+    //zeros<<<grid, threads>>>(energy);
+
+    cudaHandleError( cudaFree(energy_r) );
+    cudaHandleError( cudaFree(energy_k) );
+
+    // Adding in angular momementum energy if -l flag is on
+    if (corotating && dimnum > 1){
+
+        double2 *energy_l, *dwfc;
+        double *A;
+
+        cudaHandleError( cudaMalloc((void **) &energy_l, sizeof(double2)*gsize) );
+        cudaHandleError( cudaMalloc((void **) &dwfc, sizeof(double2)*gsize) );
+
+        A = par.dsval("Ax_gpu");
+
+        derive<<<grid, threads>>>(wfc, energy_l, 1, gsize, dx);
+        cudaCheckError();
+
+        vecMult<<<grid, threads>>>(energy_l, A, energy_l);
+        cudaCheckError();
+
+        A = par.dsval("Ay_gpu");
+        derive<<<grid, threads>>>(wfc, dwfc, xDim, gsize, dy);
+        cudaCheckError();
+
+        vecMult<<<grid, threads>>>(dwfc, A, dwfc);
+        cudaCheckError();
+        sum<<<grid, threads>>>(dwfc,energy_l, energy_l);
+        cudaCheckError();
+
+        if (dimnum == 3){
+            A = par.dsval("Az_gpu");
+
+            derive<<<grid, threads>>>(wfc, dwfc, xDim*yDim, gsize, dz);
+            cudaCheckError();
+            vecMult<<<grid, threads>>>(dwfc, A, dwfc);
+            cudaCheckError();
+
+            sum<<<grid, threads>>>(dwfc,energy_l, energy_l);
+            cudaCheckError();
+        }
+
+        cudaHandleError( cudaFree(dwfc) );
+
+        double2 scale = {0, HBAR};
+        scalarMult<<<grid, threads>>>(energy_l, scale, energy_l);
+        cudaCheckError();
+        cMult<<<grid, threads>>>(wfc_c, energy_l, energy_l);
+        cudaCheckError();
+
+        energy_lsum<<<grid, threads>>>(energy, energy_l, energy);
+        cudaCheckError();
+        cudaHandleError( cudaFree(energy_l) );
+    }
+
+    gpuReduce(energy, gsize, threads.x);
+
+    double sum = 0;
+
+    cudaHandleError( cudaMemcpy(&sum, energy, sizeof(double),
+                                cudaMemcpyDeviceToHost) );
+
+    sum *= dg;
+
+    cudaHandleError( cudaFree(energy) );
+    cudaHandleError( cudaFree(wfc_c) );
 
     return sum;
 }
-
-/**
-** Calculates energy and angular momentum of current state.
-** Implementation not fully finished.
-**/
-double energy_angmom(double2 *gpuWfc, int gState, Grid &par){
-    bool corotating = par.bval("corotating");
-    int xDim = par.ival("xDim");
-    int yDim = par.ival("yDim");
-    int zDim = par.ival("zDim");
-    double dx = par.dval("dx");
-    double dy = par.dval("dy");
-    double dz = par.dval("dz");
-
-    std::cout << dx << '\t' << dy << '\t' << dz << '\t' << xDim << '\t' 
-              << yDim << '\t' << zDim << '\n';
-
-    int gSize = xDim * yDim * zDim;
-    double dt = par.dval("dt");
-    double gDenConst = par.dval("gDenConst");
-
-    double mass = par.dval("mass");
-    double omegaX = par.dval("omegaX");
-    double omegaY = par.dval("omegaY");
-    double omegaZ = par.dval("omegaZ");
-
-    dim3 threads = par.threads;
-    dim3 grid = par.grid;
-
-    // Creating the 2d plan and defining other cuda variables
-    cufftHandle plan;
-    cufftResult result;
-    cudaError_t err;
-
-    if (par.ival("dimnum") == 1){
-        plan = par.ival("plan_1d");
-    }
-    if (par.ival("dimnum") == 2){
-        plan = par.ival("plan_2d");
-    }
-    if (par.ival("dimnum") == 3){
-        plan = par.ival("plan_3d");
-    }
-
-    double renorm_factor=1.0/pow(gSize,0.5);
-    double out;
-
-    // now allocating space on CPU and GPU for energy
-    double2 *energy, *energy_gpu, *tmp_wfc, *op;
-
-    energy = (double2*)malloc(sizeof(double2)*gSize);
-
-    cudaMalloc((void**) &energy_gpu, sizeof(double2)*gSize);
-    cudaMalloc((void**) &tmp_wfc, sizeof(double2)*gSize);
-
-
-    for (int i=0; i < gSize; ++i){
-        energy[i].x = 0.0; 
-        energy[i].y = 0.0; 
-    }
-
-    // Now to memcpy the values over
-    cudaMemcpy(energy_gpu, energy, sizeof(double2)*gSize,
-               cudaMemcpyHostToDevice);
-
-    int op_space = 2;
-
-    result = cufftExecZ2Z( plan, gpuWfc, tmp_wfc, CUFFT_FORWARD );
-
-    scalarMult<<<grid,threads>>>(tmp_wfc, renorm_factor, tmp_wfc);//Normalise
-
-    op = par.cufftDoubleComplexval("K_gpu");
-
-    energyCalc<<<grid,threads>>>(tmp_wfc, op, dt, energy_gpu, gState,op_space,
-                                 0.5*sqrt(omegaZ/mass), gDenConst);
-    result = cufftExecZ2Z( plan, energy_gpu, energy_gpu, CUFFT_INVERSE );
-    result = cufftExecZ2Z( plan, tmp_wfc, tmp_wfc, CUFFT_INVERSE );
-
-    scalarMult<<<grid,threads>>>(energy_gpu, renorm_factor, energy_gpu);
-    scalarMult<<<grid,threads>>>(tmp_wfc, renorm_factor, tmp_wfc);
-
-    if (corotating){
-        op_space = 0;
-    }
-    else{
-        op_space = 1;
-    }
-
-    op = par.cufftDoubleComplexval("V_gpu");
-
-    energyCalc<<<grid,threads>>>(tmp_wfc, op, dt, energy_gpu, gState,op_space,
-                                 0.5*sqrt(omegaZ/mass), gDenConst);
-
-    err=cudaMemcpy(energy, energy_gpu, 
-                   sizeof(cufftDoubleComplex)*gSize, 
-                   cudaMemcpyDeviceToHost);
-    if(err!=cudaSuccess){
-        std::cout << "ERROR: Could not copy energy to host!" << '\n';
-        exit(1);
-    }
-    
-    for(int i=0; i < gSize; i++){
-        out += energy[i].x + energy[i].y;
-    }
-
-    cudaFree(energy_gpu);
-    cudaFree(tmp_wfc);
-    free(energy);
-    return out*dx*dy*dz;
-
-}
-/*
-
-// Creates narrow Gaussian "delta" peaks for vortex kicking
-void delta_define(double *x, double *y, double x0, double y0, double *delta,
-                  Grid &par){
-    int xDim = par.ival("xDim");
-    int yDim = par.ival("yDim");
-    cufftDoubleComplex *EV_opt = par.cufftDoubleComplexval("EV_opt");
-    double *V = par.dsval("V");
-    double dx = par.dval("dx");
-    double dt = par.dval("dt");
-
-    for (int i=0; i<xDim; ++i){
-        for (int j=0; j<yDim; ++j){
-            delta[j*xDim + i] = 1e6*HBAR*exp( -( pow( x[i] - x0, 2) +
-                                pow( y[j] - y0, 2) )/(5*dx*dx) );
-            EV_opt[(j*xDim + i)].x = cos( -(V[(j*xDim + i)] +
-                                     delta[j*xDim + i])*(dt/(2*HBAR)));
-            EV_opt[(j*xDim + i)].y = sin( -(V[(j*xDim + i)] +
-                                     delta[j*xDim + i])*(dt/(2*HBAR)));
-        }
-    }
-}
-*/

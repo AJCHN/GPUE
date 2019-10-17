@@ -11,8 +11,11 @@ import math
 xDim = yDim = zDim = 256
 
 # Function to create plot with vtk
-def to_vtk(item, xDim, yDim, zDim, nframes, filename):
-    outfile = open(filename, "w")
+def to_vtk(item, xDim, yDim, zDim, data_dir, filename):
+    data_loc = filename
+    if data_dir != "":
+        data_loc = data_dir + "/" + filename
+    outfile = open(data_loc, "w")
     outfile.write("# vtk DataFile Version 3.0\n")
     outfile.write("vtkfile\n")
     outfile.write("ASCII\n")
@@ -267,3 +270,80 @@ def wfc_com(xDim, yDim, zDim, data_dir, pltval, i):
 
     return comx, comy
 
+def find_thresh(xDim, yDim, data_dir, pltval, i, thresh_percent):
+    if data_dir[0] != "/": 
+        data_dir = "../" + data_dir
+
+    filename = data_dir + "/" + pltval + "%s" %i
+    print(i)
+
+    lines = np.loadtxt(filename)
+    '''
+    sum = 0
+    for i in range(xDim*yDim):
+        sum += lines[i]
+    sum /= (xDim*yDim)
+    sum *= thresh_percent
+    return sum
+    '''
+    max = 0
+    for i in range(xDim*yDim):
+        if lines[i] > max:
+            max = lines[i]
+    return max*thresh_percent
+
+def find_com(xDim, yDim, data_dir, pltval, i):
+    if data_dir[0] != "/":
+        data_dir = "../" + data_dir
+
+    filename = data_dir + "/" + pltval + "%s" %i
+    print(i)
+
+    lines = np.loadtxt(filename)
+    wfc_2d = np.reshape(lines, (xDim, yDim))
+    sum = 0
+    com_x = 0
+    com_y = 0
+    for i in range(xDim/2, xDim):
+        for j in range(yDim):
+            sum += wfc_2d[j,i]
+            com_y += j*wfc_2d[j,i]
+            com_x += i*wfc_2d[j,i]
+
+    com_y /= sum
+    com_x /= sum
+
+    return (com_x, com_y)
+
+
+def find_angle(xDim, yDim, data_dir, pltval, i, thresh, com_tot):
+    if data_dir[0] != "/":
+        data_dir = "../" + data_dir
+
+    filename = data_dir + "/" + pltval + "%s" %i
+    print(i)
+
+    lines = np.loadtxt(filename)
+    wfc_2d = np.reshape(lines, (xDim, yDim))
+
+    # find CoM and angle for each y element
+    angle = 0
+    count = 0
+    for j in range(yDim):
+        sum = 0
+        com = 0
+        for i in range(xDim/2, xDim):
+            com += i*wfc_2d[j,i]
+            sum += wfc_2d[j,i]
+
+        if (sum >= thresh):
+            com /= sum
+            #print(com)
+
+            #angle += math.atan(((com_tot[1]) - j)/((com)-(com_tot[0])))
+            angle += math.atan2((yDim/2) - j,(com)-(xDim*0.25))
+            #angle += math.atan2((com)-(xDim*0.25),(yDim/2) - j)
+            count += 1
+
+    angle /= count
+    return angle

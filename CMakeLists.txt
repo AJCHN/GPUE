@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.8)
 project(gpue_build LANGUAGES CXX CUDA)
 find_package(CUDA QUIET REQUIRED)
 
@@ -6,6 +6,13 @@ set(
     CUDA_NVCC_FLAGS
     ${CUDA_NVCC_FLAGS};
     -O3 -gencode arch=compute_37,code=sm_37 -lcufft -fopenmp
+)
+
+find_file( EXAMPLE_CFG example.cfg src/ )
+add_library(unitTest OBJECT src/unit_test.cu include/unit_test.h include/kernels.h)
+set( CFG_FILE_PATH _CFG_FILE_PATH="${EXAMPLE_CFG}" )
+target_compile_options(
+   unitTest PRIVATE -D${CFG_FILE_PATH} -dc -std=c++11
 )
 
 add_executable(
@@ -54,8 +61,7 @@ add_executable(
     src/tracker.cu
     include/tracker.h
 
-    src/unit_test.cu
-    include/unit_test.h
+    $<TARGET_OBJECTS:unitTest>
 
     src/vort.cu
     include/vort.h

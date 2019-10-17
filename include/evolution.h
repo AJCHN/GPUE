@@ -40,23 +40,32 @@
 #include "vortex_3d.h"
 
 
-/* Function declarations */
-/*
- * arg1 = Function result code from CUDA CUFFT calls.
- * arg2 = String data for name of function called. Prints value to stdout.
- */
 
 // UPDATE LIST LATER
  /**
  * @brief       performs real or imaginary time evolution
  * @ingroup     data
- * @param       result Function result code of CUDA operation
- * @param       c Descriptor of CUDA operation
+ * @param       Parameter set
+ * @param       Total number of steps
+ * @param       Real (1) or imaginary (1) time evolution
+ * @param       String buffer for writing files
  * @return      0 for success. See CUDA failure codes in cuda.h for other values
  */
 void evolve(Grid &par,
             int numSteps,
             unsigned int gstate,
             std::string buffer);
+
+void apply_gauge(Grid &par, double2 *wfc, double2 *Ax, double2 *Ay,
+                 double2 *Az, double renorm_factor_x,
+                 double renorm_factor_y, double renorm_factor_z, bool flip,
+                 cufftHandle plan_1d, cufftHandle plan_dim2,
+                 cufftHandle plan_dim3, double dx, double dy, double dz,
+                 double time, int yDim, int size);
+
+void apply_gauge(Grid &par, double2 *wfc, double2 *Ax, double2 *Ay,
+                 double renorm_factor_x, double renorm_factor_y, bool flip,
+                 cufftHandle plan_1d, cufftHandle plan_dim2, double dx,
+                 double dy, double dz, double time);
 
 #endif

@@ -31,26 +31,4 @@ void transfer_sobel(Grid &par);
 void find_edges(Grid &par,
                 double2* wfc, double* edges);
 
-// Here, we will need 3 different convolution filters: row, col, depth
-// these functions will only be used in this file (for now)
-__device__ void convolve_row(double* density, double* edges, double* kernel,
-                             int width, int height, int depth);
-
-
-__device__ void convolve_col(double* density, double* edges, double* kernel,
-                             int width, int height, int depth);
-
-__device__ void convolve_depth(double* density, double* edges, double* kernel,
-                               int width, int height, int depth);
-
-double find_thresh(Grid &par, double* edges, double thresh_const);
-
-bool *threshold_wfc(Grid &par, double* edges, double threshold,
-                    int xDim, int yDim, int zDim);
-
-__global__ void scan_2d(double* edges, bool* out, double threshold,
-                        int type, int n);
-
-__global__ void threshold_sum(bool *in, bool *in2, bool *out);
-
 #endif

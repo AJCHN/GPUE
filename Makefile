@@ -13,7 +13,7 @@ CUDA_LIB	= $(CUDA_HOME)/lib64
 CUDA_HEADER	= $(CUDA_HOME)/include
 CC		= $(CUDA_HOME)/bin/nvcc --ptxas-options=-v --compiler-options -Wall #-save-temps
 CHOSTFLAGS	= #-fopenmp
-CFLAGS		= -g -O0 -std=c++11 -Xcompiler '-std=c++11' -Xcompiler '-fopenmp' #-L$(CUTT_DIR) -l:libcutt.a
+CFLAGS		= -g -O3 -std=c++11 -Xcompiler '-std=c++11' -Xcompiler '-fopenmp' #-L$(CUTT_DIR) -l:libcutt.a
 endif
 
 CUDA_FLAGS 	= -lcufft
